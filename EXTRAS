@@ -1,0 +1,123 @@
+# DISTANCE and WaterShed
+dist_transform = cv2.distanceTransform(thresh, cv2.DIST_L2,0)
+
+local_max_location = peak_local_max(dist_transform, min_distance=1, indices=True)
+local_max_boolean = peak_local_max(dist_transform, min_distance=1, indices=False)
+
+
+markers, no = ndi.label(local_max_boolean)
+segmented = skimage.morphology.watershed(thresh, markers, connectivity= 2, mask=thresh)
+
+#Find contours in ROI
+contours, hierarchy = cv2.findContours(thresh,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+print(len(contours))
+
+
+
+
+# Identify some background and foreground pixels from the intensity values.
+# These pixels are used as seeds for watershed.
+markers = np.zeros_like(image)
+foreground, background = 1, 2
+markers[image < 30.0] = background
+markers[image > 150.0] = foreground
+
+ws = watershed(thresh)
+seg1 = label(ws == foreground)
+
+expanded = expand_labels(seg1, distance=10)
+
+# Show the segmentations.
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(9, 5),sharex=True, sharey=True)
+
+color1 = label2rgb(seg1, image=image, bg_label=0)
+axes[0].imshow(color1)
+axes[0].set_title('Sobel+Watershed')
+
+color2 = label2rgb(expanded, image=image, bg_label=0)
+axes[1].imshow(color2)
+axes[1].set_title('Expanded labels')
+
+for a in axes:
+    a.axis('off')
+fig.tight_layout()
+plt.show()
+
+
+labels = skimage.morphology.label(edges_sob)
+labelCount = np.bincount(labels.ravel())
+print(labels)
+background = np.argmax(labelCount)
+
+edges_sob[labels != background] = 255
+plt.imshow(edges_sob, cmap=plt.cm.gray)
+plt.show()
+
+
+strel = skimage.morphology.disk(4)
+I_closed = skimage.morphology.binary_closing(edges_sob, strel)
+I_closed_filled = nd.morphology.binary_fill_holes(I_closed)
+
+plt.imsave("filled.jpg",I_closed_filled, cmap='gray')
+filled = cv2.imread("filled.jpg")
+
+
+# Make segmentation using edge-detection and watershed.
+edges = filters.sobel(thresh)
+
+# Identify some background and foreground pixels from the intensity values.
+# These pixels are used as seeds for watershed.
+markers = np.zeros_like(thresh)
+foreground, background = 1, 2
+markers[thresh < 30.0] = background
+markers[thresh > 150.0] = foreground
+
+ws = watershed(edges, markers, connectivity=0, mask=thresh)
+seg1 = label(ws == foreground)
+
+expanded = expand_labels(seg1, distance=5)
+
+# Show the segmentations.
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(9, 5),
+                         sharex=True, sharey=True)
+
+color1 = label2rgb(seg1, image=image.copy(), bg_label=0)
+axes[0].imshow(color1)
+axes[0].set_title('Sobel+Watershed')
+
+color2 = label2rgb(expanded, image=image.copy(), bg_label=0)
+axes[1].imshow(color2)
+axes[1].set_title('Expanded labels')
+
+for a in axes:
+    a.axis('off')
+fig.tight_layout()
+plt.show()
+
+
+
+
+# Now we want to separate the two objects in image
+# Generate the markers as local maxima of the distance to the background
+distance = ndi.distance_transform_edt(thresh)
+coords = peak_local_max(distance, footprint=np.ones((3, 3)), labels=thresh)
+mask = np.zeros(distance.shape, dtype=bool)
+mask[tuple(coords.T)] = True
+markers, _ = ndi.label(mask)
+labels = watershed(-distance, markers, mask=thresh)
+
+fig, axes = plt.subplots(ncols=3, figsize=(9, 3), sharex=True, sharey=True)
+ax = axes.ravel()
+
+ax[0].imshow(image, cmap=plt.cm.gray)
+ax[0].set_title('Overlapping objects')
+ax[1].imshow(-distance)
+ax[1].set_title('Distances')
+ax[2].imshow(labels, cmap=plt.cm.nipy_spectral)
+ax[2].set_title('Separated objects')
+
+for a in ax:
+    a.set_axis_off()
+
+fig.tight_layout()
+plt.show()
