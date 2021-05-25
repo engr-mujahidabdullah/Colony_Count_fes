@@ -18,6 +18,9 @@ from skimage.measure import label
 from skimage.color import label2rgb
 from skimage.feature import peak_local_max
 
+import warnings
+warnings.filterwarnings('ignore')
+
 '''
 #This method draws simple grid overthe image based on the passed step
 #The pxstep controls the size of the grid
@@ -37,12 +40,12 @@ def drawBasicGrid(image, pxstep, midX, midY):
 def cv_contour(_image_,_image_result_):
     #Find contours in ROI
     contours, hierarchy = cv2.findContours(_image_,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    print(len(contours))
+    print("Segmented Count:" + str(len(contours)))
     result = cv2.drawContours(_image_result_, contours, -1, (0,255,0), 3)
     return result
 
 #import Image and copy it as img
-image = cv2.imread("C_6.jpeg")
+image = cv2.imread("Colonies.jpg")
 image = imutils.resize(image, width=500, height = 300)
 img = image.copy()
 
@@ -94,35 +97,29 @@ local_max_boolean = peak_local_max(dist_transform, min_distance=1, indices=False
 markers, no = ndi.label(local_max_boolean)
 segmented = skimage.segmentation.watershed(thresh, markers, connectivity=1, mask=thresh)
 
-# Make segmentation using edge-detection and watershed.
-edges = filters.sobel(thresh)
+# Now we want to separate the two objects in image
+# Generate the markers as local maxima of the distance to the background
+distance = ndi.distance_transform_edt(thresh)
+coords = peak_local_max(distance, footprint=np.ones((3, 3)), labels=thresh)
+mask = np.zeros(distance.shape, dtype=bool)
+mask[tuple(coords.T)] = True
+markers, no = ndi.label(mask)
 
-# Identify some background and foreground pixels from the intensity values.
-# These pixels are used as seeds for watershed.
-markers = np.zeros_like(thresh)
-foreground, background = 1, 2
-markers[thresh < 30.0] = background
-markers[thresh > 150.0] = foreground
+labels = watershed(-distance, markers, mask=thresh)
 
-ws = watershed(edges, markers, connectivity=0, mask=thresh)
-seg1 = label(ws == foreground)
+print("After Water Shed:" + str(no))
+fig, axes = plt.subplots(ncols=2, figsize=(9, 3), sharex=True, sharey=True)
+ax = axes.ravel()
 
-expanded = expand_labels(seg1, distance=5)
+ax[0].imshow(image, cmap=plt.cm.gray)
+ax[0].set_title('Overlapping objects')
 
-# Show the segmentations.
-fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(9, 5),
-                         sharex=True, sharey=True)
+ax[1].imshow(labels, cmap=plt.cm.nipy_spectral)
+ax[1].set_title('Separated objects')
 
-color1 = label2rgb(seg1, image=image.copy(), bg_label=0)
-axes[0].imshow(color1)
-axes[0].set_title('Sobel+Watershed')
+for a in ax:
+    a.set_axis_off()
 
-color2 = label2rgb(expanded, image=image.copy(), bg_label=0)
-axes[1].imshow(color2)
-axes[1].set_title('Expanded labels')
-
-for a in axes:
-    a.axis('off')
 fig.tight_layout()
 plt.show()
 
